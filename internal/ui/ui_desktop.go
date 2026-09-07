@@ -61,7 +61,7 @@ type uiBackend interface {
 // stored value instead keeps them in agreement (#3481).
 type backendWindow interface {
 	IsDecorated() bool
-	SetDecorated(decorated bool)
+	applyDecorated()
 	IsVisible() bool
 	SetVisible(visible bool)
 	applyResizingMode()
@@ -72,7 +72,7 @@ type backendWindow interface {
 	SetSize(width, height int)
 	SetSizeLimits(minw, minh, maxw, maxh int)
 	IsFloating() bool
-	SetFloating(floating bool)
+	applyFloating()
 	Maximize()
 	IsMaximized() bool
 	Minimize()
@@ -81,7 +81,7 @@ type backendWindow interface {
 	applyColorMode()
 	Restore()
 	applyClosingHandled()
-	SetMousePassthrough(enabled bool)
+	applyMousePassthrough()
 	IsMousePassthrough() bool
 	RequestAttention()
 }

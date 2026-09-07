@@ -44,12 +44,12 @@ func (w *glfwWindow) IsDecorated() bool {
 	return v
 }
 
-func (w *glfwWindow) SetDecorated(decorated bool) {
+func (w *glfwWindow) applyDecorated() {
 	w.ui.mainThread.Call(func() {
 		if w.ui.isTerminated() {
 			return
 		}
-		if err := w.ui.setWindowDecorated(decorated); err != nil {
+		if err := w.ui.setWindowDecorated(w.ui.desktopWindow.isInitWindowDecorated()); err != nil {
 			w.ui.setError(err)
 			return
 		}
@@ -112,12 +112,12 @@ func (w *glfwWindow) IsFloating() bool {
 	return v
 }
 
-func (w *glfwWindow) SetFloating(floating bool) {
+func (w *glfwWindow) applyFloating() {
 	w.ui.mainThread.Call(func() {
 		if w.ui.isTerminated() {
 			return
 		}
-		if err := w.ui.setWindowFloating(floating); err != nil {
+		if err := w.ui.setWindowFloating(w.ui.desktopWindow.isInitWindowFloating()); err != nil {
 			w.ui.setError(err)
 			return
 		}
@@ -314,12 +314,12 @@ func (w *glfwWindow) applyClosingHandled() {
 	})
 }
 
-func (w *glfwWindow) SetMousePassthrough(enabled bool) {
+func (w *glfwWindow) applyMousePassthrough() {
 	w.ui.mainThread.Call(func() {
 		if w.ui.isTerminated() {
 			return
 		}
-		if err := w.ui.setWindowMousePassthrough(enabled); err != nil {
+		if err := w.ui.setWindowMousePassthrough(w.ui.desktopWindow.isInitWindowMousePassthrough()); err != nil {
 			w.ui.setError(err)
 			return
 		}

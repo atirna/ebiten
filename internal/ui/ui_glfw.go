@@ -539,6 +539,27 @@ func (u *glfwBackend) createWindow() error {
 	// Publish the backend and set the running state true just as a window is set (#2742).
 	u.setRunningBackend(u)
 
+	// Setters store before checking the backend (#3633). Re-read after publishing
+	// so a setter either reaches the backend or its stored value is picked up here.
+	monitor = u.getInitMonitor()
+	ww, wh = u.desktopWindow.getInitWindowSizeInDIP()
+
+	// The size and the position are re-applied below. These three reach the window only as
+	// pre-creation hints, so nothing else would pick them up.
+	if runtime.GOOS != "darwin" {
+		// On macOS the decoration is applied once after the first buffer swap (#2600), which
+		// reads the recorded value at that point and so needs nothing here.
+		if err := u.setWindowDecorated(u.desktopWindow.isInitWindowDecorated()); err != nil {
+			return err
+		}
+	}
+	if err := u.setWindowFloating(u.desktopWindow.isInitWindowFloating()); err != nil {
+		return err
+	}
+	if err := u.setWindowMousePassthrough(u.desktopWindow.isInitWindowMousePassthrough()); err != nil {
+		return err
+	}
+
 	// The position must be set before the size is set (#1982).
 	// setWindowSizeInDIP refers the current monitor's device scale.
 	wx, wy := u.desktopWindow.getInitWindowPositionInDIP()

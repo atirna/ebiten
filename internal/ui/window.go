@@ -58,6 +58,9 @@ func (*nullWindow) IsDecorated() bool {
 func (*nullWindow) SetDecorated(decorated bool) {
 }
 
+func (*nullWindow) applyDecorated() {
+}
+
 func (*nullWindow) IsVisible() bool {
 	return false
 }
@@ -106,6 +109,9 @@ func (*nullWindow) IsFloating() bool {
 func (*nullWindow) SetFloating(floating bool) {
 }
 
+func (*nullWindow) applyFloating() {
+}
+
 func (*nullWindow) Maximize() {
 }
 
@@ -146,6 +152,9 @@ func (*nullWindow) IsClosingHandled() bool {
 }
 
 func (*nullWindow) SetMousePassthrough(enabled bool) {
+}
+
+func (*nullWindow) applyMousePassthrough() {
 }
 
 func (*nullWindow) IsMousePassthrough() bool {

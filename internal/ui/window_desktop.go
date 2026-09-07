@@ -254,7 +254,7 @@ func (w *desktopWindow) SetDecorated(decorated bool) {
 	if b == nil {
 		return
 	}
-	b.Window().SetDecorated(decorated)
+	b.Window().applyDecorated()
 }
 
 func (w *desktopWindow) IsVisible() bool {
@@ -321,7 +321,7 @@ func (w *desktopWindow) SetFloating(floating bool) {
 	if b == nil {
 		return
 	}
-	b.Window().SetFloating(floating)
+	b.Window().applyFloating()
 }
 
 func (w *desktopWindow) IsMaximized() bool {
@@ -542,7 +542,7 @@ func (w *desktopWindow) SetMousePassthrough(enabled bool) {
 	if b == nil {
 		return
 	}
-	b.Window().SetMousePassthrough(enabled)
+	b.Window().applyMousePassthrough()
 }
 
 func (w *desktopWindow) IsMousePassthrough() bool {

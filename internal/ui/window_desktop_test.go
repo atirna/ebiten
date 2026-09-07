@@ -17,130 +17,178 @@
 package ui
 
 import (
-	"image"
+	"sync"
 	"testing"
 )
 
-type windowSetterTestBackend struct {
-	uiBackend
-	window backendWindow
+// recordingWindow is a backendWindow whose applyX methods read the recorded
+// setting, as glfwWindow's do, and keep what they saw.
+type recordingWindow struct {
+	nullWindow
+
+	ui *UserInterface
+
+	mu           sync.Mutex
+	applied      map[string]bool
+	onSetSize    func(int, int)
+	onSetMonitor func(*Monitor)
 }
 
-func (b *windowSetterTestBackend) Window() backendWindow {
+func (w *recordingWindow) record(name string, read func() bool) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	w.applied[name] = read()
+}
+
+func (w *recordingWindow) get(name string) bool {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	return w.applied[name]
+}
+
+func (w *recordingWindow) applyDecorated() {
+	w.record("decorated", w.ui.desktopWindow.isInitWindowDecorated)
+}
+
+func (w *recordingWindow) applyFloating() {
+	w.record("floating", w.ui.desktopWindow.isInitWindowFloating)
+}
+
+func (w *recordingWindow) applyMousePassthrough() {
+	w.record("mouse passthrough", w.ui.desktopWindow.isInitWindowMousePassthrough)
+}
+
+func (w *recordingWindow) SetSize(width, height int) {
+	w.onSetSize(width, height)
+}
+
+func (w *recordingWindow) SetMonitor(monitor *Monitor) {
+	w.onSetMonitor(monitor)
+}
+
+// applyAll stands in for the block createWindow runs once the backend is published.
+func (w *recordingWindow) applyAll() {
+	w.applyDecorated()
+	w.applyFloating()
+	w.applyMousePassthrough()
+}
+
+type recordingBackend struct {
+	uiBackend
+	window *recordingWindow
+}
+
+func (b *recordingBackend) Window() backendWindow {
 	return b.window
 }
 
-type windowSetterTestWindow struct {
-	nullWindow
-
-	decorated        bool
-	floating         bool
-	size             image.Point
-	monitor          *Monitor
-	mousePassthrough bool
+// These settings reach the window only as pre-creation hints, so nothing
+// re-applies them later on its own.
+var windowSetters = []struct {
+	name  string
+	set   func(*desktopWindow, bool)
+	store func(*desktopWindow) bool
+}{
+	{"decorated", (*desktopWindow).SetDecorated, (*desktopWindow).isInitWindowDecorated},
+	{"floating", (*desktopWindow).SetFloating, (*desktopWindow).isInitWindowFloating},
+	{"mouse passthrough", (*desktopWindow).SetMousePassthrough, (*desktopWindow).isInitWindowMousePassthrough},
 }
 
-func (w *windowSetterTestWindow) SetDecorated(decorated bool) {
-	w.decorated = decorated
-}
-
-func (w *windowSetterTestWindow) SetFloating(floating bool) {
-	w.floating = floating
-}
-
-func (w *windowSetterTestWindow) SetMonitor(monitor *Monitor) {
-	w.monitor = monitor
-}
-
-func (w *windowSetterTestWindow) SetSize(width, height int) {
-	w.size = image.Pt(width, height)
-}
-
-func (w *windowSetterTestWindow) SetMousePassthrough(enabled bool) {
-	w.mousePassthrough = enabled
-}
-
-func TestDesktopWindowSettersKeepInitStateAfterBackendPublishes(t *testing.T) {
-	monitor := &Monitor{}
-	tests := []struct {
-		name  string
-		set   func(*desktopWindow)
-		check func(*testing.T, *UserInterface, *windowSetterTestWindow)
-	}{
-		{
-			name: "decorated",
-			set: func(w *desktopWindow) {
-				w.SetDecorated(false)
-			},
-			check: func(t *testing.T, u *UserInterface, w *windowSetterTestWindow) {
-				t.Helper()
-				if u.desktopWindow.isInitWindowDecorated() || w.decorated {
-					t.Errorf("SetDecorated(false) left init=%t window=%t; want false, false", u.desktopWindow.isInitWindowDecorated(), w.decorated)
-				}
-			},
-		},
-		{
-			name: "floating",
-			set: func(w *desktopWindow) {
-				w.SetFloating(true)
-			},
-			check: func(t *testing.T, u *UserInterface, w *windowSetterTestWindow) {
-				t.Helper()
-				if !u.desktopWindow.isInitWindowFloating() || !w.floating {
-					t.Errorf("SetFloating(true) left init=%t window=%t; want true, true", u.desktopWindow.isInitWindowFloating(), w.floating)
-				}
-			},
-		},
-		{
-			name: "monitor",
-			set: func(w *desktopWindow) {
-				w.SetMonitor(monitor)
-			},
-			check: func(t *testing.T, u *UserInterface, w *windowSetterTestWindow) {
-				t.Helper()
-				if u.getInitMonitor() != monitor || w.monitor != monitor {
-					t.Errorf("SetMonitor left init=%p window=%p; want %p", u.getInitMonitor(), w.monitor, monitor)
-				}
-			},
-		},
-		{
-			name: "size",
-			set: func(w *desktopWindow) {
-				w.SetSize(320, 240)
-			},
-			check: func(t *testing.T, u *UserInterface, w *windowSetterTestWindow) {
-				t.Helper()
-				width, height := u.desktopWindow.getInitWindowSizeInDIP()
-				if width != 320 || height != 240 || w.size != image.Pt(320, 240) {
-					t.Errorf("SetSize(320, 240) left init=(%d, %d) window=%v; want (320, 240), (320, 240)", width, height, w.size)
-				}
-			},
-		},
-		{
-			name: "mouse passthrough",
-			set: func(w *desktopWindow) {
-				w.SetMousePassthrough(true)
-			},
-			check: func(t *testing.T, u *UserInterface, w *windowSetterTestWindow) {
-				t.Helper()
-				if !u.desktopWindow.isInitWindowMousePassthrough() || !w.mousePassthrough {
-					t.Errorf("SetMousePassthrough(true) left init=%t window=%t; want true, true", u.desktopWindow.isInitWindowMousePassthrough(), w.mousePassthrough)
-				}
-			},
-		},
+func newRecordingUI(t *testing.T) (*UserInterface, *recordingWindow) {
+	t.Helper()
+	u := &UserInterface{}
+	if err := u.init(); err != nil {
+		t.Fatal(err)
 	}
+	return u, &recordingWindow{ui: u, applied: map[string]bool{}}
+}
 
-	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
-			u := &UserInterface{}
-			if err := u.init(); err != nil {
-				t.Fatal(err)
+// A setter must record its value whether or not a backend is published: the
+// startup reads the record after publishing, and a stale record would clobber
+// the window (#3481, #3633).
+func TestWindowSetterRecordsValueForStartupToRead(t *testing.T) {
+	for _, setter := range windowSetters {
+		t.Run(setter.name, func(t *testing.T) {
+			// Setting what is already recorded would prove nothing: decorated
+			// starts out true, the other two false.
+			u, window := newRecordingUI(t)
+			want := !setter.store(&u.desktopWindow)
+
+			// Set during the startup, before the backend is published.
+			setter.set(&u.desktopWindow, want)
+			u.setRunningBackend(&recordingBackend{window: window})
+			window.applyAll()
+			if got := window.get(setter.name); got != want {
+				t.Errorf("set before the backend was published: window has %t, want %t", got, want)
 			}
-			window := &windowSetterTestWindow{}
-			u.setRunningBackend(&windowSetterTestBackend{window: window})
 
-			test.set(&u.desktopWindow)
-			test.check(t, u, window)
+			// Set once the backend is published: the record must follow, or the
+			// next apply reverts the window to it.
+			u2, window2 := newRecordingUI(t)
+			u2.setRunningBackend(&recordingBackend{window: window2})
+			setter.set(&u2.desktopWindow, want)
+			if got, applied := setter.store(&u2.desktopWindow), window2.get(setter.name); got != want || applied != want {
+				t.Errorf("set after the backend was published: record has %t and the window has %t, want %t", got, applied, want)
+			}
 		})
+	}
+}
+
+// The reported repro is a setter racing RunGame, so run one against the startup
+// order under -race: however they interleave, the value must reach the window.
+func TestWindowSetterRacingStartupIsNotLost(t *testing.T) {
+	for _, setter := range windowSetters {
+		t.Run(setter.name, func(t *testing.T) {
+			for range 200 {
+				u, window := newRecordingUI(t)
+				want := !setter.store(&u.desktopWindow)
+
+				var wg sync.WaitGroup
+				wg.Add(1)
+				go func() {
+					defer wg.Done()
+					setter.set(&u.desktopWindow, want)
+				}()
+
+				// What initOnMainThread and createWindow do: read the setting as
+				// a hint, create the window, publish the backend, read again.
+				hint := setter.store(&u.desktopWindow)
+				u.setRunningBackend(&recordingBackend{window: window})
+				window.applyAll()
+
+				wg.Wait()
+
+				if got := window.get(setter.name); got != want {
+					t.Fatalf("window has %t, want %t: value lost (hint read as %t)", got, want, hint)
+				}
+			}
+		})
+	}
+}
+
+func TestWindowSizeAndMonitorRecordedBeforeBackendCall(t *testing.T) {
+	u, window := newRecordingUI(t)
+	u.setRunningBackend(&recordingBackend{window: window})
+	called := 0
+	window.onSetSize = func(width, height int) {
+		called++
+		if width != 800 || height != 600 {
+			t.Errorf("backend size = %dx%d, want 800x600", width, height)
+		}
+		if w, h := u.desktopWindow.getInitWindowSizeInDIP(); w != width || h != height {
+			t.Errorf("recorded size = %dx%d, backend received %dx%d", w, h, width, height)
+		}
+	}
+	monitor := &Monitor{}
+	window.onSetMonitor = func(got *Monitor) {
+		called++
+		if got != monitor || u.getInitMonitor() != monitor {
+			t.Error("monitor must be recorded before calling the backend with it")
+		}
+	}
+	u.desktopWindow.SetSize(800, 600)
+	u.desktopWindow.SetMonitor(monitor)
+	if called != 2 {
+		t.Errorf("backend calls = %d, want 2", called)
 	}
 }
